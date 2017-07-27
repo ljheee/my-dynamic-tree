@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>My Tree View</title>
+	<link rel="stylesheet" type="text/css" href="easyui.css">
+	<link rel="stylesheet" type="text/css" href="icon.css">
+	<link rel="stylesheet" type="text/css" href="demo.css">
+	<script type="text/javascript" src="jquery.min.js"></script>
+	<script type="text/javascript" src="jquery.easyui.min.js"></script>
+	
+	
+	
+	<script type="text/javascript">
+		var oldName;//重命名Before时保存
+		var nodekeep="";
+		var drag_newId;
+		var newCount = 1;
+		function jsonpCallback(){}
+	</script>
+</head>
+
+<body>
+	<h2>My Tree View</h2>
+	<p>1、右键打开“快捷菜单”.</p>
+	<p>2、双击节点可以重命名.</p>
+	<div style="margin:20px 0;"></div>
+	<div class="easyui-panel" style="padding:5px">
+		<ul id="tt" class="easyui-tree" data-options="
+				url: 'http://localhost:8080/tree/treatServlet',
+				method: 'get',
+				animate: true,
+				lines:true,//显示虚线
+				dnd:true, //可拖拽
+				onContextMenu: function(e,node){//右键“快捷菜单”
+					e.preventDefault();
+					$(this).tree('select',node.target);
+					$('#mm').menu('show',{
+						left: e.pageX,
+						top: e.pageY
+					});
+				},
+				onBeforeExpand: function(node, param) {
+					$.ajax({
+					type: 'GET',
+					url: 'http://localhost:8080/tree/treatServlet?pid='+node.id,
+					cache: false,
+					async: false,
+					dataType: 'json',
+					success: function(datas) {
+						if(nodekeep.indexOf(node.id)==-1)
+						{
+						append(datas, node);
+						}
+					}
+					});	
+				},
+				onLoadSuccess:function(node, data) {//立即加载根节点下的
+					//
+					$.ajax({
+					type: 'GET',
+					url: 'http://localhost:8080/tree/treatServlet?pid='+1,
+					cache: false,
+					async: false,
+					dataType: 'json',
+					success: function(datas) {
+						append(datas, $('#tt').tree('getRoot'));
+					}
+					});	
+				},
+				onBeforeLoad:function(){
+　　    			//获取根节点
+　　    			var tempRoot = $('#tt').tree('getRoot');
+　　    			//调用expand
+　　    			$('#tt').tree('expand',tempRoot); 
+　　			},
+				onDblClick: function(node){//双击--重命名
+					$(this).tree('beginEdit',node.target);
+				},
+				onBeforeEdit:function(node){
+					oldName = node.text;
+				},
+				onAfterEdit:function(node){//重命名结束
+					if(oldName == node.text){
+					}else{
+						$.ajax({
+							url: 'http://localhost:8080/tree/treeNodeController',
+							type: 'get',
+							dataType: 'json',
+							
+							data:{'id':node.id,'newText':node.text},
+						});
+						alert('重命名完成，newText='+node.text);
+					}
+				},
+				
+				formatter:function(node){//格式化：父节点显示个数
+						var s = node.text;
+						if (node.children){
+							s += ' <span style=\'color:blue\'>(' + node.children.length + ')</span>';
+						}
+						return s;
+				},
+				
+				onDragEnter:function(target,source){
+					var targetNode = $(this).tree('getNode',target);
+					var childs = targetNode.children;
+					if(childs == null){//拖拽到叶子节点
+						drag_newId = parseInt(targetNode.id) + '1';
+					}else{//拖拽到非叶子节点上
+						drag_newId = parseInt(childs[childs.length-1].id) + 1;
+					}
+				},
+				onDrop:function(target,source,point){
+					var targetNode = $(this).tree('getNode',target);
+					
+					$.ajax({    
+						url: 'http://localhost:8080/tree/treeNodeController2',
+						type: 'post',
+						dataType: 'json',
+						data:{'sourceId':source.id,'FuId':targetNode.id,'drag_newId':drag_newId},
+						success: function(ret) {
+							if (ret.result) {
+								$.messager.alert('错误', ret.detail, 'error');
+							}else {
+								//ininttree() //刷新数据
+								alert('成功','','info');
+							}
+						}
+					});
+					
+					alert('拖拽完成,'+targetNode.text+'newId='+drag_newId);
+				},
+				onClick: function(node){//单机--展开
+					$('#tt').tree('expand',node.target);
+					$.ajax({
+						type: 'GET',
+						url: 'http://localhost:8080/tree/treatServlet?pid='+node.id,
+						cache: false,
+						async: false,
+						dataType: 'json',
+						success: function(datas) {
+							if(nodekeep.indexOf(node.id)==-1)
+							{
+							append(datas, node);
+							}
+						}
+					});	
+				}
+				
+			"></ul>
+	</div>
+	<div id="mm" class="easyui-menu" style="width:120px;">
+		<div onclick="appendAdd()" data-options="iconCls:'icon-add'">新建</div>
+		<div onclick="removeit()" data-options="iconCls:'icon-remove'">删除</div>
+		<div class="menu-sep"></div>
+		<div onclick="expand()">展开</div>
+		<div onclick="collapse()">收起</div>
+		<div onclick="reName()">重命名</div>
+	</div>
+	
+	<script type="text/javascript">
+		function appendAdd(){
+			var t = $('#tt');
+			
+			var node = t.tree('getSelected');
+			//先展开
+			$.ajax({
+					type: 'GET',
+					url: 'http://localhost:8080/tree/treatServlet?pid='+node.id,
+					cache: false,
+					async: false,
+					dataType: 'json',
+					success: function(datas) {
+						if(nodekeep.indexOf(node.id)==-1)
+						{
+							append(datas, node);
+						}
+					}
+					});	
+			
+			
+			var childs = node.children;
+			var newId;
+			if(childs == null){//在叶子节点上新建，新建节点id位数加1
+				newId = parseInt(node.id) + '1';
+			}else{//在非叶子节点上新建，先获取最大孩子节点id,新建节点id自增1
+				newId = parseInt(childs[childs.length-1].id) + 1;
+			}
+			
+			var newText = 'new item' + newCount;
+			t.tree('append', {
+				parent: (node?node.target:null),
+				data: [{
+					id: newId,
+					text: newText
+				}]
+			});
+			
+			
+			$.ajax({    
+						url: 'http://localhost:8080/tree/treeNodeController',    
+						type: 'post',    
+						dataType: 'json',    
+						data:{'newId':newId,'FuId':node.id,'newText':newText},
+					});
+			
+			newCount++;
+			alert("新建成功，newId="+newId+'fuId='+node.id);
+			//var tempChilds = node.children;
+			//var newNode = tempChilds[tempChilds.length-1];
+			//console.log(newNode);
+			//t.tree('beginEdit',newNode.target);
+		}
+		
+		function removeit(){
+			var node = $('#tt').tree('getSelected');
+			var rootNode = $('#tt').tree('getRoot');
+			if(node == rootNode){
+				alert("根节点不可删除");
+				return;
+			}
+			
+			if(window.confirm('你确定要删除--'+node.text+'--吗？')){
+                $('#tt').tree('remove', node.target);
+				$.ajax({
+							url: 'http://localhost:8080/tree/treeNodeController2',
+							type: 'get',
+							dataType: 'json',
+							data:{'id':node.id},
+						});
+             }else{
+                //alert("取消");
+                return false;
+             } 
+		}
+		
+		function collapse(){
+			var t = $('#tt');
+			var node = $('#tt').tree('getSelected');
+			$('#tt').tree('collapse',node.target);
+		}
+		function expand(){
+			var node = $('#tt').tree('getSelected');//json对象
+			$('#tt').tree('expand',node.target);
+			$.ajax({
+                type: 'GET',
+                url: 'http://localhost:8080/tree/treatServlet?pid='+node.id,
+                cache: false,
+                async: false,
+                dataType: 'json',
+                success: function(datas) {
+                    if(nodekeep.indexOf(node.id)==-1)
+                    {
+                     append(datas, node);
+                    }
+                }
+            });				
+		}
+		function reName(){
+			var node = $('#tt').tree('getSelected');
+			$('#tt').tree('beginEdit',node.target);
+		}
+		
+		//增加子节点
+function append(datas,cnode) {
+    var node = cnode;
+    $('#tt').tree('append', {
+        parent: (node?node.target:null),
+        data: datas
+    });
+	nodekeep+=","+node.id;
+}
+//重新加载
+function reload() {
+    var node = $('#tt').tree('getSelected');
+    if (node) {
+        $('#tt').tree('reload', node.target);
+    } else {
+        $('#tt').tree('reload');
+    }
+}
+
+	</script>
+</body>
+</html>
